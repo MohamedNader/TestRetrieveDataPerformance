@@ -37,6 +37,14 @@ namespace ReadLargeData
             MeasureMemoryUsageAsync(nameof(GetData_Using_Dapper), GetData_Using_Dapper).GetAwaiter().GetResult();
             MeasureMemoryUsageAsync(nameof(GetData_Using_DapperAsync), GetData_Using_DapperAsync).GetAwaiter().GetResult();
             MeasureMemoryUsageAsync(nameof(GetData_Using_DapperList), GetData_Using_DapperList).GetAwaiter().GetResult();
+
+            Console.WriteLine("===========");
+            Console.WriteLine("===========");
+            Console.WriteLine("===========");
+
+            MeasureMemoryUsageAsync(nameof(GetData_Using_AsyncEnumerable_With_Out_ConfigureAwait), GetData_Using_AsyncEnumerable_With_Out_ConfigureAwait).GetAwaiter().GetResult();
+            MeasureMemoryUsageAsync(nameof(GetData_Using_ListAsync_With_Out_ConfigureAwait), GetData_Using_ListAsync).GetAwaiter().GetResult();
+            MeasureMemoryUsageAsync(nameof(GetData_Using_DapperAsync_With_Out_ConfigureAwait), GetData_Using_DapperAsync).GetAwaiter().GetResult();
         }
 
         public async Task SeedDataAsync()
@@ -193,7 +201,7 @@ namespace ReadLargeData
                     string query = "SELECT * FROM Data";
 
                     // Query the data and map to the Inspection class
-                    IEnumerable<MyData> allData = await connection.QueryAsync<MyData>(query);
+                    IEnumerable<MyData> allData = await connection.QueryAsync<MyData>(query).ConfigureAwait(false);
 
                     foreach (var data in allData)
                     {
@@ -237,6 +245,90 @@ namespace ReadLargeData
                         await writer.WriteLineAsync(line);
                     }
                 }
+            }
+        }
+
+
+        public async Task GetData_Using_AsyncEnumerable_With_Out_ConfigureAwait()
+        {
+            var fileInfo = new FileInfo("DataAsyncEnumerable.csv");
+
+            if (fileInfo.Exists)
+            {
+                fileInfo.Delete();  // Ensure file is removed before writing
+            }
+
+            using (var writer = new StreamWriter(fileInfo.FullName))
+            {
+                // Write the header
+                await writer.WriteLineAsync("EmployeeID,Name,Department");
+
+
+                await foreach (var data in _dataModelContext.Data.FromSqlRaw("Select * From data").AsNoTracking().AsAsyncEnumerable().ConfigureAwait(false))
+                {
+                    var line = $"{data.EmployeeID},{data.Name},{data.Department}";
+                    await writer.WriteLineAsync(line);
+                }
+            }
+        }
+
+        public async Task GetData_Using_ListAsync_With_Out_ConfigureAwait()
+        {
+            var fileInfo = new FileInfo("DataAsListAsync.csv");
+
+            // Create the Excel file if it doesn't exist
+            if (fileInfo.Exists)
+            {
+                fileInfo.Delete();  // Ensure file is removed before writing
+            }
+
+            using (var writer = new StreamWriter(fileInfo.FullName))
+            {
+                // Write the header
+                await writer.WriteLineAsync("EmployeeID,Name,Department");
+
+                var allData = await _dataModelContext.Data.AsNoTracking().ToListAsync().ConfigureAwait(false);
+                for (int i = 0; i < allData.Count; i++)
+                {
+                    var line = $"{allData[i].EmployeeID},{allData[i].Name},{allData[i].Department}";
+                    await writer.WriteLineAsync(line);
+                }
+            }
+        }
+
+        public async Task GetData_Using_DapperAsync_With_Out_ConfigureAwait()
+        {
+            var fileInfo = new FileInfo("DataNormalDapperAsync.csv");
+
+            // Create the Excel file if it doesn't exist
+            if (fileInfo.Exists)
+            {
+                fileInfo.Delete();  // Ensure file is removed before writing
+            }
+
+            using (var writer = new StreamWriter(fileInfo.FullName))
+            {
+                // Write the header
+                await writer.WriteLineAsync("EmployeeID,Name,Department");
+
+                // Start writing from the second row
+
+                using (var connection = new SqlConnection(_configuration["Data:DataConnection:ConnectionString"]))
+                {
+                    connection.Open();
+
+                    string query = "SELECT * FROM Data";
+
+                    // Query the data and map to the Inspection class
+                    IEnumerable<MyData> allData = await connection.QueryAsync<MyData>(query);
+
+                    foreach (var data in allData)
+                    {
+                        var line = $"{data.EmployeeID},{data.Name},{data.Department}";
+                        await writer.WriteLineAsync(line);
+                    }
+                }
+
             }
         }
 
